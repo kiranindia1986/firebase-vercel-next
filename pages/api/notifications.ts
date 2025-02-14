@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
 interface Notification {
-    id: string;
+    id?: string; // Mark id as optional in case it's already present in Firestore
     message: string;
     users: { id: string; deleted?: boolean; read?: boolean }[];
     timestamp: FirebaseFirestore.Timestamp;
@@ -33,8 +33,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         snapshot.forEach((doc) => {
             const notificationData = doc.data() as Notification;
 
-            // Ensure id is set from Firestore document
-            const notificationWithId = { id: doc.id, ...notificationData };
+            // Avoid duplicate id assignment if `id` already exists in Firestore document
+            const notificationWithId = {
+                ...(notificationData.id ? notificationData : { id: doc.id, ...notificationData })
+            };
 
             // Find the user in the 'users' array
             const userEntry = notificationData.users.find(
