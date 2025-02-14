@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
-// Define the expected notification structure
 interface Notification {
     id: string;
     message: string;
@@ -34,16 +33,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         snapshot.forEach((doc) => {
             const notificationData = doc.data() as Notification;
 
+            // Ensure id is set from Firestore document
+            const notificationWithId = { id: doc.id, ...notificationData };
+
             // Find the user in the 'users' array
             const userEntry = notificationData.users.find(
                 (user) => user.id === userId && !user.deleted
             );
 
             if (userEntry) {
-                notifications.push({
-                    id: doc.id,
-                    ...notificationData,
-                });
+                notifications.push(notificationWithId);
 
                 if (!userEntry.read) unreadCount++;
             }
