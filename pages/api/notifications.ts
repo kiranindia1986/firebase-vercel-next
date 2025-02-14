@@ -1,6 +1,14 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
+// Define the expected notification structure
+interface Notification {
+    id: string;
+    message: string;
+    users: { id: string; deleted?: boolean; read?: boolean }[];
+    timestamp: FirebaseFirestore.Timestamp;
+}
+
 /**
  * Fetches notifications for a specific user from Firestore.
  */
@@ -20,16 +28,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Fetch all notifications from Firestore
         const snapshot = await db.collection("notification").get();
 
-        const notifications: any[] = [];
+        const notifications: Notification[] = [];
         let unreadCount = 0;
 
         snapshot.forEach((doc) => {
-            const notificationData = doc.data();
+            const notificationData = doc.data() as Notification;
 
             // Find the user in the 'users' array
             const userEntry = notificationData.users.find(
-                (user: { id: string; deleted?: boolean; read?: boolean }) =>
-                    user.id === userId && !user.deleted
+                (user) => user.id === userId && !user.deleted
             );
 
             if (userEntry) {
@@ -46,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.log(`✅ Notifications Fetched:`, notifications);
 
         return res.status(200).json({ count: unreadCount, notifications });
-    } catch (error: unknown) {
+    } catch (error) {
         console.error("❌ Error fetching notifications:", error);
 
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
