@@ -46,8 +46,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             unreadNotifications: unreadNotificationsCount,
             unreadMessages: unreadMessagesCount,
         });
-    } catch (error) {
+    } catch (error: unknown) {
         console.error("Error fetching unread counts:", error);
-        return res.status(500).json({ error: error.message });
+
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+
+        return res.status(500).json({ error: errorMessage });
     }
 }
