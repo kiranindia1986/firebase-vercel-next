@@ -1,47 +1,53 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { db } from "../../lib/firebaseAdmin"; // ✅ Correct import
+import { db } from "../../lib/firebaseAdmin"; // Import Firestore DB
+
+interface Notification {
+    users: { id: string; read: boolean }[];
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
-        return res.status(405).json({ error: "Method not allowed" });
+        return res.status(405).json({ error: "Method Not Allowed" });
     }
 
     const { userId } = req.query;
-
     if (!userId || typeof userId !== "string") {
         return res.status(400).json({ error: "Invalid userId" });
     }
 
     try {
-        console.log(`Fetching unread counts for user: ${userId}`);
+        console.log(`UserID received: ${userId}`);
 
-        // Fetch unread notifications
-        const notificationsSnapshot = await db.collection("notification").get();
-        const unreadNotifications = notificationsSnapshot.docs.filter((doc) => {
-            const users = doc.data().users || [];
-            return users.some((user: any) => user.id === userId && user.read === false);
-        }).length;
+        // Fetch notifications
+        const notificationSnapshot = await db.collection("notification").get();
+        const unreadNotificationsCount = notificationSnapshot.docs
+            .map((doc) => doc.data() as Notification)
+            .filter((data) => data.users.some((user) => user.id === userId && !user.read)).length;
 
-        // Fetch unread chat messages
+        console.log(`Unread notifications count: ${unreadNotificationsCount}`);
+
+        // Fetch unread messages from userChats
         const userChatsSnapshot = await db.collection("userChats").get();
-        let unreadMessages = 0;
+        let unreadMessagesCount = 0;
 
         userChatsSnapshot.forEach((doc) => {
             const data = doc.data();
-            for (const key in data) {
+            Object.keys(data).forEach((key) => {
                 const subDoc = data[key];
-                if (subDoc.uid === userId && subDoc.lastMessage?.isRead === false) {
-                    unreadMessages++;
+                if (subDoc.uid === userId && subDoc.lastMessage && subDoc.lastMessage.isRead === false) {
+                    unreadMessagesCount++;
                 }
-            }
+            });
         });
 
+        console.log(`Unread messages count: ${unreadMessagesCount}`);
+
         return res.status(200).json({
-            unreadNotifications,
-            unreadMessages,
+            unreadNotifications: unreadNotificationsCount,
+            unreadMessages: unreadMessagesCount,
         });
     } catch (error) {
         console.error("Error fetching unread counts:", error);
-        return res.status(500).json({ error: "Internal Server Error" });
+        return res.status(500).json({ error: error.message });
     }
 }
