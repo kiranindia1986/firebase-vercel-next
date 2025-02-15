@@ -59,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const userProfiles: Record<string, string> = {}; // Map userId -> photoURL
 
         if (userIdsToFetch.size > 0) {
-            const userDocs = await db.collection("users").where("id", "in", Array.from(userIdsToFetch)).get();
+            const userDocs = await db.collection("users").where("uid", "in", Array.from(userIdsToFetch)).get();
 
             userDocs.forEach((doc) => {
                 const userData = doc.data();
