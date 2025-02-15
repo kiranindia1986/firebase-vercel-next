@@ -2,14 +2,16 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
 interface Notification {
-    id?: string; // Mark id as optional in case it's already present in Firestore
-    message: string;
-    users: { id: string; deleted?: boolean; read?: boolean }[];
-    timestamp: FirebaseFirestore.Timestamp;
+    id?: string;
+    messageContent: string;
+    users: { id: string; deleted?: boolean; read?: boolean; email?: string; displayName?: string; lastName?: string; photoURL?: string }[];
+    createdAt: FirebaseFirestore.Timestamp;
+    userId: string;
+    teams?: { label?: string; value?: string }[];
 }
 
 /**
- * Fetches notifications for a specific user from Firestore.
+ * Fetches notifications for a specific user, adding author's profile picture (photoURL).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -26,17 +28,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         // Fetch all notifications from Firestore
         const snapshot = await db.collection("notification").get();
-
         const notifications: Notification[] = [];
         let unreadCount = 0;
 
+        const userIdsToFetch = new Set<string>(); // To batch fetch user details
+
         snapshot.forEach((doc) => {
             const notificationData = doc.data() as Notification;
-
-            // Avoid duplicate id assignment if `id` already exists in Firestore document
-            const notificationWithId = {
-                ...(notificationData.id ? notificationData : { id: doc.id, ...notificationData })
-            };
+            const notificationWithId = { id: doc.id, ...notificationData };
 
             // Find the user in the 'users' array
             const userEntry = notificationData.users.find(
@@ -45,20 +44,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             if (userEntry) {
                 notifications.push(notificationWithId);
-
                 if (!userEntry.read) unreadCount++;
+            }
+
+            // Collect unique userIds to fetch `photoURL`
+            if (notificationData.userId) {
+                userIdsToFetch.add(notificationData.userId);
             }
         });
 
         console.log(`✅ Unread Count: ${unreadCount}`);
-        console.log(`✅ Notifications Fetched:`, notifications);
 
-        return res.status(200).json({ count: unreadCount, notifications });
+        // **Fetch photoURLs from 'users' collection**
+        const userProfiles: Record<string, string> = {}; // Map userId -> photoURL
+
+        if (userIdsToFetch.size > 0) {
+            const userDocs = await db.collection("users").where("id", "in", Array.from(userIdsToFetch)).get();
+
+            userDocs.forEach((doc) => {
+                const userData = doc.data();
+                userProfiles[userData.id] = userData.photoURL || ""; // Store photoURL
+            });
+        }
+
+        // Append photoURL to each notification author
+        const enrichedNotifications = notifications.map((notif) => {
+            return {
+                ...notif,
+                photoURL: userProfiles[notif.userId] || "", // Assign photoURL if exists
+            };
+        });
+
+        console.log(`✅ Notifications Fetched:`, enrichedNotifications);
+
+        return res.status(200).json({ count: unreadCount, notifications: enrichedNotifications });
     } catch (error) {
         console.error("❌ Error fetching notifications:", error);
 
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
-
         return res.status(500).json({ error: errorMessage });
     }
 }
