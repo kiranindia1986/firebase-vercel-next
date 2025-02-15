@@ -5,13 +5,13 @@ interface Notification {
     id?: string;
     messageContent: string;
     users: { id: string; deleted?: boolean; read?: boolean; email?: string; displayName?: string; lastName?: string; photoURL?: string }[];
-    createdAt: FirebaseFirestore.Timestamp;
-    userId: string;
+    createdAt: { _seconds: number; _nanoseconds: number };
+    userId: string; // User who created the notification
     teams?: { label?: string; value?: string }[];
 }
 
 /**
- * Fetches notifications for a specific user, adding author's profile picture (photoURL).
+ * Fetches notifications for a specific user, adding author's profile picture (photoURL) by comparing userId with users.uid.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -47,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (!userEntry.read) unreadCount++;
             }
 
-            // Collect unique userIds to fetch `photoURL`
+            // Collect unique `userId` to fetch `photoURL` from `users` collection
             if (notificationData.userId) {
                 userIdsToFetch.add(notificationData.userId);
             }
@@ -55,15 +55,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log(`✅ Unread Count: ${unreadCount}`);
 
-        // **Fetch photoURLs from 'users' collection**
-        const userProfiles: Record<string, string> = {}; // Map userId -> photoURL
+        // **Fetch photoURLs from 'users' collection by comparing uid**
+        const userProfiles: Record<string, string> = {}; // Map uid -> photoURL
 
         if (userIdsToFetch.size > 0) {
             const userDocs = await db.collection("users").where("uid", "in", Array.from(userIdsToFetch)).get();
 
             userDocs.forEach((doc) => {
                 const userData = doc.data();
-                userProfiles[userData.id] = userData.photoURL || ""; // Store photoURL
+                userProfiles[userData.uid] = userData.photoURL || ""; // Store photoURL
             });
         }
 
@@ -74,6 +74,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 photoURL: userProfiles[notif.userId] || "", // Assign photoURL if exists
             };
         });
+
+        // **Sort notifications in descending order of createdAt**
+        enrichedNotifications.sort((a, b) => b.createdAt._seconds - a.createdAt._seconds);
 
         console.log(`✅ Notifications Fetched:`, enrichedNotifications);
 
