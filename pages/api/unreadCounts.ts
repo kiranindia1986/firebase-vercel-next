@@ -16,17 +16,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log(`UserID received: ${userId}`);
+        console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
 
-        // Fetch notifications
-        const notificationSnapshot = await db.collection("notification").get();
-        const unreadNotificationsCount = notificationSnapshot.docs
-            .map((doc) => doc.data() as Notification)
-            .filter((data) => data.users.some((user) => user.id === userId && !user.read)).length;
+        // Fetch only notifications where the user has `read: false`
+        const unreadNotificationsSnapshot = await db
+            .collection("notification")
+            .where("users", "array-contains", { id: userId, read: false }) // ✅ Fetch only where read=false
+            .get();
 
-        console.log(`Unread notifications count: ${unreadNotificationsCount}`);
+        const unreadNotificationsCount = unreadNotificationsSnapshot.size;
 
-        // Fetch unread messages from userChats
+        console.log(`✅ Unread notifications count: ${unreadNotificationsCount}`);
+
+        // Fetch unread messages from `userChats`
         const userChatsSnapshot = await db.collection("userChats").get();
         let unreadMessagesCount = 0;
 
@@ -40,14 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
         });
 
-        console.log(`Unread messages count: ${unreadMessagesCount}`);
+        console.log(`✅ Unread messages count: ${unreadMessagesCount}`);
 
         return res.status(200).json({
             unreadNotifications: unreadNotificationsCount,
             unreadMessages: unreadMessagesCount,
         });
     } catch (error: unknown) {
-        console.error("Error fetching unread counts:", error);
+        console.error("❌ Error fetching unread counts:", error);
 
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
 
