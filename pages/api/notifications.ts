@@ -20,7 +20,7 @@ interface Notification {
 }
 
 /**
- * Fetches unread notifications for a specific user, ensuring correct `photoURL` assignment.
+ * Fetches only unread (`read: false`) notifications for a specific user.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -33,39 +33,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log(`🔹 Fetching notifications for UserID: ${userId}`);
+        console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
 
-        // Fetch all notifications from Firestore
+        // Fetch notifications where the user has `read: false`
         const snapshot = await db.collection("notification").get();
-        let notifications: Notification[] = [];
+        let unreadNotifications: Notification[] = [];
         let unreadCount = 0;
+
         const userIdsToFetch = new Set<string>(); // Collect user IDs for batch fetching
 
         snapshot.forEach((doc) => {
             const notificationData = doc.data() as Notification;
-            const notificationWithId = { id: doc.id, ...notificationData };
 
-            // ✅ **Explicitly filter only unread notifications for the requested user**
-            const unreadUserEntry = notificationData.users.find(
-                (user) => user.id === userId && !user.deleted && user.read === false // ✅ Ensure `read === false`
+            // Filter unread notifications for the specific user
+            const userEntry = notificationData.users.find(
+                (user) => user.id === userId && !user.deleted && user.read === false
             );
 
-            if (unreadUserEntry) {
-                notifications.push(notificationWithId);
+            if (userEntry) {
+                unreadNotifications.push({ id: doc.id, ...notificationData });
                 unreadCount++;
-            }
 
-            // **Collect unique user IDs for batch fetching of `photoURL`**
-            notificationData.users.forEach((user) => {
-                if (user.id) {
-                    userIdsToFetch.add(user.id);
-                }
-            });
+                // Collect unique user IDs for fetching `photoURL`
+                notificationData.users.forEach((user) => {
+                    if (user.id) {
+                        userIdsToFetch.add(user.id);
+                    }
+                });
+            }
         });
 
-        console.log(`✅ Filtered Unread Count (should match actual unread notifications): ${unreadCount}`);
+        console.log(`✅ Unread Count: ${unreadCount}`);
 
-        // **Batch Fetch Users to Get Correct `photoURL`**
+        // **Batch Fetch User Profiles to Get Correct `photoURL`**
         const userProfiles: Record<string, string> = {}; // Map uid -> photoURL
 
         if (userIdsToFetch.size > 0) {
@@ -78,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         // **Assign Correct `photoURL` to Users in Notifications**
-        notifications = notifications.map((notif) => ({
+        unreadNotifications = unreadNotifications.map((notif) => ({
             ...notif,
             users: notif.users.map(user => ({
                 ...user,
@@ -86,14 +86,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             })),
         }));
 
-        // **Sort notifications in descending order of `createdAt`**
-        notifications.sort((a, b) => b.createdAt._seconds - a.createdAt._seconds);
+        // **Sort unread notifications in descending order of `createdAt`**
+        unreadNotifications.sort((a, b) => b.createdAt._seconds - a.createdAt._seconds);
 
-        console.log(`✅ Notifications Fetched (Unread Only):`, notifications);
+        console.log(`✅ Unread Notifications Fetched:`, unreadNotifications);
 
-        return res.status(200).json({ count: unreadCount, notifications });
+        return res.status(200).json({ count: unreadCount, notifications: unreadNotifications });
     } catch (error) {
-        console.error("❌ Error fetching notifications:", error);
+        console.error("❌ Error fetching unread notifications:", error);
 
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
         return res.status(500).json({ error: errorMessage });
