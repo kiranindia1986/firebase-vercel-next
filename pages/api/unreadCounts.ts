@@ -12,33 +12,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
+        console.log(`🔹 Fetching unread notifications count for UserID: ${userId}`);
 
-        // Fetch notifications where the user exists in the `users` array
-        const notificationSnapshot = await db
+        // Query Firestore for notifications where the user has `read: false`
+        const unreadNotificationsSnapshot = await db
             .collection("notification")
-            .where("users.id", "==", userId) // Fetch only relevant notifications
+            .where("users", "array-contains", { id: userId, read: false }) // ✅ Filter directly in Firestore
             .get();
 
-        let unreadNotificationsCount = 0;
+        const unreadNotificationsCount = unreadNotificationsSnapshot.size;
 
-        // Iterate through notifications and filter only `read: false`
-        notificationSnapshot.forEach((doc) => {
-            const notificationData = doc.data();
-
-            // Ensure `users` exists and is an array before using `.find()`
-            if (Array.isArray(notificationData.users)) {
-                const userEntry = notificationData.users.find(
-                    (user: { id: string; read?: boolean }) => user.id === userId && !user.read // Type explicitly defined here ✅
-                );
-
-                if (userEntry) {
-                    unreadNotificationsCount++;
-                }
-            }
-        });
-
-        console.log(`✅ Unread notifications count: ${unreadNotificationsCount}`);
+        console.log(`✅ Total Unread Notifications Count: ${unreadNotificationsCount}`);
 
         // Fetch unread messages from `userChats`
         const userChatsSnapshot = await db.collection("userChats").get();
@@ -54,13 +38,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
         });
 
-        console.log(`✅ Unread messages count: ${unreadMessagesCount}`);
+        console.log(`✅ Unread Messages Count: ${unreadMessagesCount}`);
 
         return res.status(200).json({
             unreadNotifications: unreadNotificationsCount,
             unreadMessages: unreadMessagesCount,
         });
-    } catch (error: unknown) {
+    } catch (error) {
         console.error("❌ Error fetching unread counts:", error);
 
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
