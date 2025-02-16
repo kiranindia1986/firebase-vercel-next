@@ -1,7 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { db } from "../../lib/firebaseAdmin"; // Import Firestore DB
-
-
+import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -16,13 +14,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
 
-        // Fetch only notifications where the user has `read: false`
-        const unreadNotificationsSnapshot = await db
+        // Fetch all notifications where user exists in `users` array
+        const notificationSnapshot = await db
             .collection("notification")
-            .where("users", "array-contains", { id: userId, read: false }) // ✅ Fetch only where read=false
+            .where("users.id", "==", userId) // Fetch only notifications related to this user
             .get();
 
-        const unreadNotificationsCount = unreadNotificationsSnapshot.size;
+        let unreadNotificationsCount = 0;
+
+        // Iterate through notifications and filter only `read: false`
+        notificationSnapshot.forEach((doc) => {
+            const notificationData = doc.data();
+
+            // Find the user's entry in the `users` array
+            const userEntry = notificationData.users.find(
+                (user) => user.id === userId && !user.read // Check if unread
+            );
+
+            if (userEntry) {
+                unreadNotificationsCount++;
+            }
+        });
 
         console.log(`✅ Unread notifications count: ${unreadNotificationsCount}`);
 
