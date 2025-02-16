@@ -14,15 +14,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         console.log(`🔹 Fetching unread notifications count for UserID: ${userId}`);
 
-        // Query Firestore for notifications where the user has `read: false`
-        const unreadNotificationsSnapshot = await db
+        // ✅ Fetch notifications that contain the user (without filtering read status)
+        const notificationsSnapshot = await db
             .collection("notification")
-            .where("users", "array-contains", { id: userId, read: false }) // ✅ Filter directly in Firestore
+            .where("users.id", "==", userId) // 🔥 Firestore supports filtering by user ID
             .get();
 
-        const unreadNotificationsCount = unreadNotificationsSnapshot.size;
+        let unreadNotificationsCount = 0;
 
-        console.log(`✅ Total Unread Notifications Count: ${unreadNotificationsCount}`);
+        notificationsSnapshot.forEach((doc) => {
+            const notificationData = doc.data();
+            // ✅ Manually filter unread notifications
+            const userEntry = notificationData.users.find(
+                (user: any) => user.id === userId && user.read === false
+            );
+            if (userEntry) {
+                unreadNotificationsCount++;
+            }
+        });
+
+        console.log(`✅ Correct Unread Notifications Count: ${unreadNotificationsCount}`);
 
         // Fetch unread messages from `userChats`
         const userChatsSnapshot = await db.collection("userChats").get();
