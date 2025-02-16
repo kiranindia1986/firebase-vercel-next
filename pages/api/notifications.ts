@@ -11,7 +11,7 @@ interface Notification {
         email?: string;
         displayName?: string;
         lastName?: string;
-        photoURL?: string
+        photoURL?: string;
     }[];
     createdAt: { _seconds: number; _nanoseconds: number };
     userId: string; // User who created the notification
@@ -33,30 +33,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log(`🔹 Fetching notifications for UserID: ${userId}`);
+        console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
 
         // Fetch all notifications from Firestore
         const snapshot = await db.collection("notification").get();
         let notifications: Notification[] = [];
         let unreadCount = 0;
-
         const userIdsToFetch = new Set<string>(); // Collect user IDs for batch fetching
 
         snapshot.forEach((doc) => {
             const notificationData = doc.data() as Notification;
             const notificationWithId = { id: doc.id, ...notificationData };
 
-            // Check if the notification contains the requested user
+            // **Filter only unread notifications for the requested user**
             const userEntry = notificationData.users.find(
-                (user) => user.id === userId && !user.deleted
+                (user) => user.id === userId && !user.deleted && !user.read // ✅ Only unread notifications
             );
 
             if (userEntry) {
                 notifications.push(notificationWithId);
-                if (!userEntry.read) unreadCount++;
+                unreadCount++;
             }
 
-            // Collect unique `users.id` for fetching `photoURL`
+            // **Collect unique user IDs for batch fetching of `photoURL`**
             notificationData.users.forEach((user) => {
                 if (user.id) {
                     userIdsToFetch.add(user.id);
@@ -66,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log(`✅ Unread Count: ${unreadCount}`);
 
-        // **Batch Fetch Users to Get photoURL**
+        // **Batch Fetch Users to Get Correct `photoURL`**
         const userProfiles: Record<string, string> = {}; // Map uid -> photoURL
 
         if (userIdsToFetch.size > 0) {
@@ -74,20 +73,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
             userDocs.forEach((doc) => {
                 const userData = doc.data();
-                userProfiles[userData.uid] = userData.photoURL || ""; // Store photoURL
+                userProfiles[userData.uid] = userData.photoURL || ""; // Store correct `photoURL`
             });
         }
 
-        // **Assign photoURL to correct users**
+        // **Assign Correct `photoURL` to Users in Notifications**
         notifications = notifications.map((notif) => ({
             ...notif,
             users: notif.users.map(user => ({
                 ...user,
-                photoURL: userProfiles[user.id] || "", // Assign correct photoURL
+                photoURL: userProfiles[user.id] || "", // ✅ Assign correct photoURL
             })),
         }));
 
-        // **Sort notifications in descending order of createdAt**
+        // **Sort notifications in descending order of `createdAt`**
         notifications.sort((a, b) => b.createdAt._seconds - a.createdAt._seconds);
 
         console.log(`✅ Notifications Fetched:`, notifications);
