@@ -20,7 +20,7 @@ interface Notification {
 }
 
 /**
- * Fetches notifications for a specific user, ensuring the correct `photoURL` is assigned from the `users` array.
+ * Fetches unread notifications for a specific user, ensuring correct `photoURL` assignment.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
+        console.log(`🔹 Fetching notifications for UserID: ${userId}`);
 
         // Fetch all notifications from Firestore
         const snapshot = await db.collection("notification").get();
@@ -45,12 +45,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const notificationData = doc.data() as Notification;
             const notificationWithId = { id: doc.id, ...notificationData };
 
-            // **Filter only unread notifications for the requested user**
-            const userEntry = notificationData.users.find(
-                (user) => user.id === userId && !user.deleted && !user.read // ✅ Only unread notifications
+            // ✅ **Explicitly filter only unread notifications for the requested user**
+            const unreadUserEntry = notificationData.users.find(
+                (user) => user.id === userId && !user.deleted && user.read === false // ✅ Ensure `read === false`
             );
 
-            if (userEntry) {
+            if (unreadUserEntry) {
                 notifications.push(notificationWithId);
                 unreadCount++;
             }
@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
         });
 
-        console.log(`✅ Unread Count: ${unreadCount}`);
+        console.log(`✅ Filtered Unread Count (should match actual unread notifications): ${unreadCount}`);
 
         // **Batch Fetch Users to Get Correct `photoURL`**
         const userProfiles: Record<string, string> = {}; // Map uid -> photoURL
@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // **Sort notifications in descending order of `createdAt`**
         notifications.sort((a, b) => b.createdAt._seconds - a.createdAt._seconds);
 
-        console.log(`✅ Notifications Fetched:`, notifications);
+        console.log(`✅ Notifications Fetched (Unread Only):`, notifications);
 
         return res.status(200).json({ count: unreadCount, notifications });
     } catch (error) {
