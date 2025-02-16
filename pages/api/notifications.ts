@@ -16,11 +16,11 @@ interface Notification {
     createdAt: { _seconds: number; _nanoseconds: number };
     userId: string; // User who created the notification
     teams?: { label?: string; value?: string }[];
-    photoURL?: string; // Added field for storing author's profile picture
+    photoURL?: string; // Profile picture of the author
 }
 
 /**
- * Fetches notifications for a specific user, adding author's profile picture (photoURL) by comparing userId with users.uid.
+ * Fetches notifications for a specific user, ensuring the correct `photoURL` is assigned from the `users` array.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -40,13 +40,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let notifications: Notification[] = [];
         let unreadCount = 0;
 
-        const userIdsToFetch = new Set<string>(); // Collect unique userIds for batch fetch
+        const userIdsToFetch = new Set<string>(); // Collect user IDs for batch fetching
 
         snapshot.forEach((doc) => {
             const notificationData = doc.data() as Notification;
             const notificationWithId = { id: doc.id, ...notificationData };
 
-            // Find the user in the 'users' array
+            // Check if the notification contains the requested user
             const userEntry = notificationData.users.find(
                 (user) => user.id === userId && !user.deleted
             );
@@ -56,15 +56,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 if (!userEntry.read) unreadCount++;
             }
 
-            // Collect unique `userId` to fetch `photoURL` from `users` collection
-            if (notificationData.userId) {
-                userIdsToFetch.add(notificationData.userId);
-            }
+            // Collect unique `users.id` for fetching `photoURL`
+            notificationData.users.forEach((user) => {
+                if (user.id) {
+                    userIdsToFetch.add(user.id);
+                }
+            });
         });
 
         console.log(`✅ Unread Count: ${unreadCount}`);
 
-        // **Batch Fetch photoURLs from 'users' collection by matching `uid`**
+        // **Batch Fetch Users to Get photoURL**
         const userProfiles: Record<string, string> = {}; // Map uid -> photoURL
 
         if (userIdsToFetch.size > 0) {
@@ -76,10 +78,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             });
         }
 
-        // **Append photoURL to each notification author**
+        // **Assign photoURL to correct users**
         notifications = notifications.map((notif) => ({
             ...notif,
-            photoURL: userProfiles[notif.userId] || "", // Assign photoURL if exists
+            users: notif.users.map(user => ({
+                ...user,
+                photoURL: userProfiles[user.id] || "", // Assign correct photoURL
+            })),
         }));
 
         // **Sort notifications in descending order of createdAt**
