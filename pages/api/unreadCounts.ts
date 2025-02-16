@@ -1,6 +1,26 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
+interface User {
+    id: string;
+    deleted?: boolean;
+    read?: boolean;
+    email?: string;
+    displayName?: string;
+    lastName?: string;
+    photoURL?: string;
+}
+
+interface Notification {
+    id?: string;
+    messageContent: string;
+    users: User[];
+    createdAt: { _seconds: number; _nanoseconds: number };
+    userId: string;
+    teams?: { label?: string; value?: string }[];
+    photoURL?: string;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
         return res.status(405).json({ error: "Method Not Allowed" });
@@ -14,20 +34,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         console.log(`🔹 Fetching unread notifications count for UserID: ${userId}`);
 
-        // ✅ Fetch notifications that contain the user (without filtering read status)
+        // Fetch notifications that contain the user
         const notificationsSnapshot = await db
             .collection("notification")
-            .where("users.id", "==", userId) // 🔥 Firestore supports filtering by user ID
+            .where("users.id", "==", userId) // ✅ Fetch notifications where the user exists
             .get();
 
         let unreadNotificationsCount = 0;
 
         notificationsSnapshot.forEach((doc) => {
-            const notificationData = doc.data();
-            // ✅ Manually filter unread notifications
+            const notificationData = doc.data() as Notification;
+
+            // ✅ Filter unread notifications correctly
             const userEntry = notificationData.users.find(
-                (user: any) => user.id === userId && user.read === false
+                (user: User) => user.id === userId && user.read === false
             );
+
             if (userEntry) {
                 unreadNotificationsCount++;
             }
