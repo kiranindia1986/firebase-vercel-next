@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Firestore instance
 
 /**
- * Marks a single notification as read for a specific user.
+ * Marks a single notification as read by updating `read: true` for the user.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "POST") {
@@ -10,14 +10,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { userId, notificationId } = req.body;
-
     if (!userId || !notificationId) {
-        return res.status(400).json({ error: "Missing userId or notificationId" });
+        return res.status(400).json({ error: "Missing required parameters" });
     }
 
     try {
-        console.log(`🔹 Marking notification ${notificationId} as read for user ${userId}`);
+        console.log(`🔹 Marking notification as read: ${notificationId} for User: ${userId}`);
 
+        // Fetch notification document
         const notificationRef = db.collection("notification").doc(notificationId);
         const notificationDoc = await notificationRef.get();
 
@@ -25,22 +25,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(404).json({ error: "Notification not found" });
         }
 
-        const notificationData = notificationDoc.data();
+        const notificationData = notificationDoc.data() as {
+            users: { id: string; read: boolean; deleted?: boolean }[];
+        };
 
-        const updatedUsers = notificationData?.users.map((user: any) => {
-            if (user.id === userId) {
-                return { ...user, read: true }; // Update read status
-            }
-            return user;
-        });
+        // Update the user's `read` status in the users array
+        const updatedUsers = notificationData.users.map((user) =>
+            user.id === userId ? { ...user, read: true } : user
+        );
 
         await notificationRef.update({ users: updatedUsers });
 
-        console.log(`✅ Notification ${notificationId} marked as read for user ${userId}`);
-
-        return res.status(200).json({ message: "Notification marked as read" });
+        console.log(`✅ Notification ${notificationId} marked as read for ${userId}`);
+        return res.status(200).json({ success: true });
     } catch (error) {
-        console.error("❌ Error updating notification:", error);
-        return res.status(500).json({ error: "Internal Server Error" });
+        console.error("❌ Error marking notification as read:", error);
+        return res.status(500).json({ error: "Failed to update notification" });
     }
 }
