@@ -1,10 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { db } from "../../lib/firebaseAdmin"; // Import Firestore DB
 
-// ✅ This tells ESLint it's intentionally unused (underscore prefix)
-interface _Notification {
-    users: { id: string; read: boolean }[];
-}
 
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
