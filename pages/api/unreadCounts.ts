@@ -14,10 +14,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         console.log(`🔹 Fetching unread notifications for UserID: ${userId}`);
 
-        // Fetch all notifications where user exists in `users` array
+        // Fetch notifications where the user exists in the `users` array
         const notificationSnapshot = await db
             .collection("notification")
-            .where("users.id", "==", userId) // Fetch only notifications related to this user
+            .where("users.id", "==", userId) // Fetch only relevant notifications
             .get();
 
         let unreadNotificationsCount = 0;
@@ -26,13 +26,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         notificationSnapshot.forEach((doc) => {
             const notificationData = doc.data();
 
-            // Find the user's entry in the `users` array
-            const userEntry = notificationData.users.find(
-                (user) => user.id === userId && !user.read // Check if unread
-            );
+            // Ensure `users` exists and is an array before using `.find()`
+            if (Array.isArray(notificationData.users)) {
+                const userEntry = notificationData.users.find(
+                    (user: { id: string; read?: boolean }) => user.id === userId && !user.read // Type explicitly defined here ✅
+                );
 
-            if (userEntry) {
-                unreadNotificationsCount++;
+                if (userEntry) {
+                    unreadNotificationsCount++;
+                }
             }
         });
 
