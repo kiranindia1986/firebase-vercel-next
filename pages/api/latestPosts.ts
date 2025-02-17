@@ -19,12 +19,6 @@ interface BlogPost {
     viewed: string[];
 }
 
-// ✅ Format Firestore Timestamp to Readable Date
-const formatTimestamp = (timestamp: FirebaseFirestore.Timestamp): string => {
-    if (!timestamp || !timestamp.seconds) return "Unknown Date";
-    const date = new Date(timestamp.seconds * 1000);
-    return date.toLocaleString(); // Formats date as `MM/DD/YYYY, HH:mm:ss`
-};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
