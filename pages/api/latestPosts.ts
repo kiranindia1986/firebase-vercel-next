@@ -5,8 +5,26 @@ interface BlogPost {
     id: string;
     isDeleted: boolean;
     createdAt: FirebaseFirestore.Timestamp;
+    messageTitle: string;
+    messageContent: string;
     teams?: { label?: string; value?: string }[]; // Optional `teams` array
+    userId: string;
+    orgId: string;
+    notificationId: string;
+    isPinned: boolean;
+    isDisablePostComments: boolean;
+    pollData?: object;
+    likes: string[];
+    comments: object[];
+    viewed: string[];
 }
+
+// ✅ Format Firestore Timestamp to Readable Date
+const formatTimestamp = (timestamp: FirebaseFirestore.Timestamp): string => {
+    if (!timestamp || !timestamp.seconds) return "Unknown Date";
+    const date = new Date(timestamp.seconds * 1000);
+    return date.toLocaleString(); // Formats date as `MM/DD/YYYY, HH:mm:ss`
+};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -66,7 +84,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log("✅ Final Filtered Posts:", filteredPosts);
 
-        return res.status(200).json({ posts: filteredPosts });
+        // ✅ Fetch User Data for Each Post Author
+        const posts = await Promise.all(
+            postsSnapshot.docs.map(async (doc) => {
+                const postData = doc.data() as BlogPost;
+
+                // ✅ Fetch Author Info from Users Collection
+                let authorName = "Unknown";
+                let authorImageUrl = "https://via.placeholder.com/40"; // Default Image
+                if (postData.userId) {
+                    const authorDoc = await db.collection("users").doc(postData.userId).get();
+                    if (authorDoc.exists) {
+                        const authorData = authorDoc.data();
+                        authorName = authorData?.displayName || authorName;
+                        authorImageUrl = authorData?.photoURL || authorImageUrl;
+                    }
+                }
+
+                return {
+                    ...postData,  // ✅ Spread original post data
+                    id: doc.id,    // ✅ Ensure `id` is correctly set
+                    createdAt: formatTimestamp(postData.createdAt), // ✅ Format `createdAt`
+                    authorName,
+                    authorImageUrl,
+                };
+            })
+        );
+
+        console.log("✅ Final Processed Posts:", posts);
+
+        return res.status(200).json({ posts: posts });
     } catch (error) {
         console.error("❌ Error fetching latest posts:", error);
         return res.status(500).json({ error: "Internal Server Error" });
