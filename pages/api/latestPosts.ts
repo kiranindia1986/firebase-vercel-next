@@ -104,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return {
                     ...postData,  // ✅ Spread original post data
                     id: doc.id,    // ✅ Ensure `id` is correctly set
-                    createdAt: formatTimestamp(postData.createdAt), // ✅ Format `createdAt`
+                    createdAt: postData.createdAt, // ✅ Format `createdAt`
                     authorName,
                     authorImageUrl,
                 };
