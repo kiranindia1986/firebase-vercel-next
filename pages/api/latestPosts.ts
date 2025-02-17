@@ -7,7 +7,7 @@ interface BlogPost {
     createdAt: FirebaseFirestore.Timestamp;
     messageTitle: string;
     messageContent: string;
-    teams?: { label?: string; value?: string }[]; // Optional `teams` array
+    teams?: { label?: string; value?: string }[]; // Optional teams array
     userId: string;
     orgId: string;
     notificationId: string;
@@ -18,6 +18,7 @@ interface BlogPost {
     comments: object[];
     viewed: string[];
 }
+
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
@@ -30,7 +31,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        console.log(`📡 Fetching teams for user: ${userId}`);
 
         // ✅ Fetch User Document
         const userDoc = await db.collection("users").doc(userId).get();
@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const userData = userDoc.data();
         console.log("🔹 User Data:", userData);
 
-        // ✅ Extract user's teams correctly
+        // ✅ Correct Extraction of Team UIDs
         const userTeams: string[] = userData?.teams?.map((team: { teamUid: string }) => team.teamUid) || [];
         console.log("✅ Corrected User's Teams:", userTeams);
 
@@ -51,15 +51,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(200).json({ posts: [] });
         }
 
-        // ✅ Fetch latest 5 posts where `isDeleted` is false and user has access
+        // ✅ Fetch all posts where isDeleted is false
         const postsSnapshot = await db.collection("blogs")
             .where("isDeleted", "==", false)
-            .where("teams", "array-contains-any", userTeams) // ✅ Match team access
             .orderBy("createdAt", "desc") // ✅ Fetch in descending order
             .limit(5) // ✅ Get only latest 5
             .get();
 
-        console.log(`✅ Latest Posts Found: ${postsSnapshot.size}`);
+
+        // ✅ Filter Posts based on user’s teams
+        const filteredPosts = postsSnapshot.docs
+            .map((doc) => {
+                const postData = doc.data() as BlogPost;
+                return {
+                    ...postData, // ✅ Spread first
+                    id: doc.id,  // ✅ Ensure id is added explicitly
+                };
+            })
+            .filter((post) =>
+                post.teams &&
+                Array.isArray(post.teams) &&
+                post.teams.some((team) => userTeams.includes(team.value!))
+            )
+            .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) // ✅ Sort by createdAt
+            .slice(0, 5); // ✅ Return latest 5 posts
+
+        console.log("✅ Final Filtered Posts:", filteredPosts);
 
         // ✅ Fetch User Data for Each Post Author
         const posts = await Promise.all(
@@ -80,8 +97,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
                 return {
                     ...postData,  // ✅ Spread original post data
-                    id: doc.id,    // ✅ Ensure `id` is correctly set
-                    createdAt: postData.createdAt.toMillis(), // ✅ Convert Firestore timestamp to milliseconds
+                    id: doc.id,    // ✅ Ensure id is correctly set
+                    createdAt: postData.createdAt, // ✅ Format createdAt
                     authorName,
                     authorImageUrl,
                 };
@@ -90,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log("✅ Final Processed Posts:", posts);
 
-        return res.status(200).json({ posts });
+        return res.status(200).json({ posts: posts });
     } catch (error) {
         console.error("❌ Error fetching latest posts:", error);
         return res.status(500).json({ error: "Internal Server Error" });
