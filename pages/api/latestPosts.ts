@@ -19,7 +19,6 @@ interface BlogPost {
     viewed: string[];
 }
 
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
         return res.status(405).json({ error: "Method Not Allowed" });
@@ -43,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const userData = userDoc.data();
         console.log("🔹 User Data:", userData);
 
-        // ✅ Correct Extraction of Team UIDs
+        // ✅ Extract user's teams correctly
         const userTeams: string[] = userData?.teams?.map((team: { teamUid: string }) => team.teamUid) || [];
         console.log("✅ Corrected User's Teams:", userTeams);
 
@@ -52,31 +51,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(200).json({ posts: [] });
         }
 
-        // ✅ Fetch all posts where `isDeleted` is false
+        // ✅ Fetch latest 5 posts where `isDeleted` is false and user has access
         const postsSnapshot = await db.collection("blogs")
             .where("isDeleted", "==", false)
+            .where("teams", "array-contains-any", userTeams) // ✅ Match team access
+            .orderBy("createdAt", "desc") // ✅ Fetch in descending order
+            .limit(5) // ✅ Get only latest 5
             .get();
 
-        console.log(`✅ Posts Found: ${postsSnapshot.size}`);
-
-        // ✅ Filter Posts based on user’s teams
-        const filteredPosts = postsSnapshot.docs
-            .map((doc) => {
-                const postData = doc.data() as BlogPost;
-                return {
-                    ...postData, // ✅ Spread first
-                    id: doc.id,  // ✅ Ensure `id` is added explicitly
-                };
-            })
-            .filter((post) =>
-                post.teams &&
-                Array.isArray(post.teams) &&
-                post.teams.some((team) => userTeams.includes(team.value!))
-            )
-            .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()) // ✅ Sort by createdAt
-            .slice(0, 5); // ✅ Return latest 5 posts
-
-        console.log("✅ Final Filtered Posts:", filteredPosts);
+        console.log(`✅ Latest Posts Found: ${postsSnapshot.size}`);
 
         // ✅ Fetch User Data for Each Post Author
         const posts = await Promise.all(
@@ -98,7 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 return {
                     ...postData,  // ✅ Spread original post data
                     id: doc.id,    // ✅ Ensure `id` is correctly set
-                    createdAt: postData.createdAt, // ✅ Format `createdAt`
+                    createdAt: postData.createdAt.toMillis(), // ✅ Convert Firestore timestamp to milliseconds
                     authorName,
                     authorImageUrl,
                 };
@@ -107,7 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         console.log("✅ Final Processed Posts:", posts);
 
-        return res.status(200).json({ posts: posts });
+        return res.status(200).json({ posts });
     } catch (error) {
         console.error("❌ Error fetching latest posts:", error);
         return res.status(500).json({ error: "Internal Server Error" });
